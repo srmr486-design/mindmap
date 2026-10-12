@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V. 디지털 문화 인터랙티브 마인드맵</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- D3.js v7 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <!-- FontAwesome for iconography -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts: Pretendard / Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Pretendard', 'Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      overflow: hidden;
+    }
+
+    /* Node & Link SVG styles */
+    .link {
+      fill: none;
+      stroke-width: 2.2px;
+      transition: stroke 0.3s ease, stroke-width 0.2s ease, opacity 0.3s ease;
+    }
+
+    .node {
+      cursor: pointer;
+    }
+
+    .node circle.main-circle {
+      transition: transform 0.2s ease, stroke 0.2s ease, fill 0.2s ease;
+    }
+
+    .node text {
+      font-family: 'Pretendard', sans-serif;
+      transition: fill 0.2s ease, font-weight 0.2s ease;
+      pointer-events: none; /* Prevents text interference */
+    }
+
+    /* Goal pill button: ZERO TRANSFORM to completely eliminate jitter/shaking */
+    .goal-badge-group {
+      cursor: pointer;
+      pointer-events: all;
+    }
+
+    .goal-badge-bg {
+      fill: #10b981;
+      transition: fill 0.2s ease, filter 0.2s ease;
+    }
+
+    .goal-badge-group:hover .goal-badge-bg {
+      fill: #047857; /* Deep emerald highlight without scale change */
+      filter: drop-shadow(0 3px 6px rgba(16, 185, 129, 0.45));
+    }
+
+    .goal-badge-group:active .goal-badge-bg {
+      fill: #065f46;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 h-screen w-screen flex flex-col transition-colors duration-300">
+
+  <!-- Header Toolbar -->
+  <header class="h-16 border-b border-slate-200/80 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between z-20 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+        <i class="fa-solid fa-network-wired text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+          V. 디지털 문화
+          <span class="text-xs px-2 py-0.5 font-medium rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 hidden sm:inline-block">학습 마인드맵</span>
+        </h1>
+        <p class="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">노드를 클릭하여 하위 항목 펼치기/접기</p>
+      </div>
+    </div>
+
+    <!-- Map Controls -->
+    <div class="flex items-center gap-1.5 sm:gap-2">
+      <button id="btnExpandAll" class="px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-slate-700 dark:text-slate-200" title="전체 펼치기">
+        <i class="fa-solid fa-arrows-up-down-left-right text-xs"></i>
+        <span class="hidden md:inline">전체 펼치기</span>
+      </button>
+      <button id="btnCollapseAll" class="px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-slate-700 dark:text-slate-200" title="기본 접기">
+        <i class="fa-solid fa-compress text-xs"></i>
+        <span class="hidden md:inline">기본 접기</span>
+      </button>
+      <button id="btnResetZoom" class="px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-slate-700 dark:text-slate-200" title="화면 중앙 맞추기">
+        <i class="fa-solid fa-crosshairs text-xs"></i>
+        <span class="hidden md:inline">중앙 정렬</span>
+      </button>
+
+      <div class="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
+
+      <!-- Theme Switcher -->
+      <button id="themeToggle" class="w-9 h-9 rounded-lg border border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition" aria-label="테마 전환">
+        <i id="themeIcon" class="fa-solid fa-moon"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Fullscreen Main Container (No side panel) -->
+  <main class="relative flex-1 w-full h-[calc(100vh-4rem)] overflow-hidden">
+    <div id="mindmap-container" class="w-full h-full relative cursor-grab active:cursor-grabbing bg-slate-50/60 dark:bg-slate-950">
+      
+      <!-- Guide Badge -->
+      <div class="absolute bottom-5 left-5 pointer-events-none hidden sm:flex items-center gap-3 px-3.5 py-2 rounded-xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 shadow-md">
+        <span class="flex items-center gap-1"><i class="fa-solid fa-mouse-pointer text-indigo-500"></i> 노드 클릭: 펼치기/접기</span>
+        <span class="text-slate-300 dark:text-slate-700">|</span>
+        <span class="flex items-center gap-1"><i class="fa-solid fa-up-down-left-right text-indigo-500"></i> 드래그: 이동</span>
+        <span class="text-slate-300 dark:text-slate-700">|</span>
+        <span class="flex items-center gap-1"><i class="fa-solid fa-magnifying-glass-plus text-indigo-500"></i> 휠: 확대/축소</span>
+      </div>
+
+      <!-- Floating Zoom Controls -->
+      <div class="absolute right-5 bottom-5 flex flex-col gap-1.5 z-10 shadow-lg rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-1 backdrop-blur-md">
+        <button id="btnZoomIn" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition" title="확대">
+          <i class="fa-solid fa-plus text-xs"></i>
+        </button>
+        <button id="btnZoomOut" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition" title="축소">
+          <i class="fa-solid fa-minus text-xs"></i>
+        </button>
+      </div>
+
+      <!-- Centered Floating Learning Goals Modal -->
+      <div id="learningGoalModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300">
+        <div id="learningGoalCard" class="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl border border-emerald-200/90 dark:border-emerald-800/80 shadow-2xl p-6 sm:p-7 transform scale-95 transition-all duration-300">
+          <!-- Modal Header -->
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <span class="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white shadow-lg shadow-emerald-500/25 shrink-0">
+                <i class="fa-solid fa-bullseye text-lg"></i>
+              </span>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] font-bold tracking-wider text-emerald-600 dark:text-emerald-400 uppercase">Lesson Objectives</span>
+                  <span class="inline-block px-2 py-0.5 text-[11px] font-semibold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 rounded-full">정보 공유</span>
+                </div>
+                <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug mt-0.5">단원 학습목표</h3>
+              </div>
+            </div>
+            <button id="btnCloseGoal" class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+              <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+          </div>
+
+          <!-- Modal Body: Learning Goals -->
+          <div class="mt-5 space-y-3">
+            <div class="flex items-start gap-3.5 p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 shadow-sm">
+              <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold text-xs shadow-md shadow-indigo-600/20">1</span>
+              <div class="pt-0.5">
+                <div class="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">정보 구분 역량</div>
+                <p class="text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold leading-relaxed mt-0.5">
+                  <span class="text-rose-600 dark:text-rose-400">보호해야 할 정보</span>와 <span class="text-emerald-600 dark:text-emerald-400">공유해야 할 정보</span>를 구분할 수 있다.
+                </p>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-3.5 p-3.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 shadow-sm">
+              <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md shadow-emerald-600/20">2</span>
+              <div class="pt-0.5">
+                <div class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">라이선스 활용 역량</div>
+                <p class="text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-semibold leading-relaxed mt-0.5">
+                  <span class="text-emerald-700 dark:text-emerald-300">CCL</span>을 활용하여 저작물을 공유할 수 있다.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <span class="text-[11px] text-slate-400 dark:text-slate-500">배경이나 ESC를 눌러도 닫힙니다</span>
+            <button id="btnConfirmGoal" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-semibold text-xs transition shadow-md shadow-emerald-600/25">
+              확인
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SVG Rendering Canvas -->
+      <svg id="mindmap-svg" class="w-full h-full block"></svg>
+    </div>
+  </main>
+
+  <script>
+    // Clean hierarchical data structure
+    const mindmapData = {
+      id: "root",
+      name: "V. 디지털 문화",
+      category: "대단원",
+      color: "#6366f1",
+      children: [
+        {
+          id: "node_1",
+          name: "1. 디지털 사회",
+          category: "중단원",
+          color: "#3b82f6",
+          children: [
+            {
+              id: "node_1_1",
+              name: "디지털 리터러시",
+              category: "소주제",
+              color: "#0ea5e9"
+            },
+            {
+              id: "node_1_2",
+              name: "디지털 기술과 진로",
+              category: "소주제",
+              color: "#06b6d4"
+            }
+          ]
+        },
+        {
+          id: "node_2",
+          name: "2. 정보 공유와 정보 보안",
+          category: "중단원",
+          color: "#8b5cf6",
+          children: [
+            {
+              id: "node_2_1",
+              name: "정보 공유",
+              category: "소주제",
+              color: "#10b981",
+              children: [
+                {
+                  id: "node_2_1_1",
+                  name: "공유해야 할 정보",
+                  category: "세부 항목",
+                  color: "#059669"
+                },
+                {
+                  id: "node_2_1_2",
+                  name: "보호해야 할 정보",
+                  category: "세부 항목",
+                  color: "#14b8a6"
+                },
+                {
+                  id: "node_2_1_3",
+                  name: "올바른 정보 공유 방법 (CCL)",
+                  category: "세부 항목",
+                  color: "#10b981"
+                }
+              ]
+            },
+            {
+              id: "node_2_2",
+              name: "정보 보안",
+              category: "소주제",
+              color: "#f59e0b",
+              children: [
+                {
+                  id: "node_2_2_1",
+                  name: "정보보안의 주요 요소",
+                  category: "세부 항목",
+                  color: "#ea580c"
+                },
+                {
+                  id: "node_2_2_2",
+                  name: "정보 보안 실천 방법",
+                  category: "세부 항목",
+                  color: "#d97706"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    };
+  </script>
+
+  <script>
+    // Theme Switcher Logic
+    const themeToggleBtn = document.getElementById('themeToggle');
+    const themeIcon = document.getElementById('themeIcon');
+
+    function applyTheme(isDark) {
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+        themeIcon.classList.replace('fa-moon', 'fa-sun');
+      } else {
+        document.documentElement.classList.remove('dark');
+        themeIcon.classList.replace('fa-sun', 'fa-moon');
+      }
+    }
+
+    const preferredTheme = localStorage.getItem('theme') ||
+      (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    applyTheme(preferredTheme === 'dark');
+
+    themeToggleBtn.addEventListener('click', () => {
+      const isCurrentlyDark = document.documentElement.classList.contains('dark');
+      const nextTheme = !isCurrentlyDark;
+      applyTheme(nextTheme);
+      localStorage.setItem('theme', nextTheme ? 'dark' : 'light');
+    });
+  </script>
+
+  <script>
+    const container = document.getElementById('mindmap-container');
+    const svg = d3.select("#mindmap-svg");
+    const g = svg.append("g").attr("class", "mindmap-canvas");
+
+    let width = container.clientWidth;
+    let height = container.clientHeight;
+
+    // Zoom setup
+    const zoom = d3.zoom()
+      .scaleExtent([0.3, 2.5])
+      .on("zoom", (event) => {
+        g.attr("transform", event.transform);
+      });
+
+    svg.call(zoom).on("dblclick.zoom", null);
+
+    let root;
+    let i = 0;
+    const duration = 500;
+    let activeFocusedNode = null;
+
+    // Tree layout configuration
+    const tree = d3.tree().nodeSize([54, 250]);
+
+    // Initialize root hierarchy
+    root = d3.hierarchy(mindmapData, d => d.children);
+    root.x0 = height / 2;
+    root.y0 = 80;
+
+    // Collapse nodes helper
+    function collapse(d) {
+      if (d.children) {
+        d._children = d.children;
+        d._children.forEach(collapse);
+        d.children = null;
+      }
+    }
+
+    // Default state: Keep level 1 open, collapse deeper
+    if (root.children) {
+      root.children.forEach(child => {
+        if (child.children) {
+          child.children.forEach(collapse);
+        }
+      });
+    }
+
+    // Center viewport to the midpoint between selected node and its parent
+    function focusBetweenParentAndNode(targetNode) {
+      const refNode = targetNode.parent ? targetNode.parent : root;
+      
+      const midX = (refNode.x + targetNode.x) / 2;
+      const midY = (refNode.y + targetNode.y) / 2;
+
+      const scale = targetNode.depth >= 2 ? 1.05 : 0.95;
+      const viewCenterX = width / 2;
+      const viewCenterY = height / 2;
+
+      const transform = d3.zoomIdentity
+        .translate(viewCenterX, viewCenterY)
+        .scale(scale)
+        .translate(-midY, -midX);
+
+      svg.transition()
+        .duration(600)
+        .ease(d3.easeCubicOut)
+        .call(zoom.transform, transform);
+    }
+
+    // Learning Goals Modal Controls
+    const modal = document.getElementById('learningGoalModal');
+    const modalContent = document.getElementById('learningGoalCard');
+
+    function showLearningGoalsModal() {
+      modal.classList.remove('opacity-0', 'pointer-events-none');
+      modal.classList.add('opacity-100');
+      modalContent.classList.remove('scale-95');
+      modalContent.classList.add('scale-100');
+    }
+
+    function hideLearningGoalsModal() {
+      modal.classList.add('opacity-0', 'pointer-events-none');
+      modal.classList.remove('opacity-100');
+      modalContent.classList.add('scale-95');
+      modalContent.classList.remove('scale-100');
+    }
+
+    document.getElementById('btnCloseGoal').addEventListener('click', hideLearningGoalsModal);
+    document.getElementById('btnConfirmGoal').addEventListener('click', hideLearningGoalsModal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) hideLearningGoalsModal();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') hideLearningGoalsModal();
+    });
+
+    // Render / Update D3 Tree
+    function update(source) {
+      const treeData = tree(root);
+      const nodes = treeData.descendants();
+      const links = treeData.links();
+
+      // Normalize depth distance
+      nodes.forEach(d => {
+        d.y = d.depth * 250 + 100;
+      });
+
+      // -------------------- NODES --------------------
+      const node = g.selectAll('g.node')
+        .data(nodes, d => d.id || (d.id = ++i));
+
+      // Enter new nodes at parent's previous position
+      const nodeEnter = node.enter().append('g')
+        .attr('class', 'node')
+        .attr("transform", d => `translate(${source.y0},${source.x0})`)
+        .on('click', (event, d) => {
+          // Pure expand/collapse only
+          event.stopPropagation();
+          activeFocusedNode = d;
+
+          if (d.children) {
+            d._children = d.children;
+            d.children = null;
+          } else if (d._children) {
+            d.children = d._children;
+            d._children = null;
+          }
+
+          update(d);
+          focusBetweenParentAndNode(d);
+        });
+
+      // Node base circle
+      nodeEnter.append('circle')
+        .attr('class', 'main-circle')
+        .attr('r', 1e-6)
+        .attr('fill', d => d.data.color || '#6366f1')
+        .attr('stroke', '#ffffff')
+        .attr('stroke-width', 2.5);
+
+      // Node indicator (+ / -) for collapsible children
+      nodeEnter.append('circle')
+        .attr('class', 'indicator-circle')
+        .attr('cx', 12)
+        .attr('cy', -10)
+        .attr('r', d => (d._children || d.children) ? 7 : 0)
+        .attr('fill', d => d._children ? '#f43f5e' : '#10b981')
+        .attr('stroke', '#ffffff')
+        .attr('stroke-width', 1.5)
+        .style('display', d => (d._children || d.children) ? 'block' : 'none');
+
+      nodeEnter.append('text')
+        .attr('class', 'indicator-text')
+        .attr('x', 12)
+        .attr('y', -7.5)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '8px')
+        .attr('font-weight', 'bold')
+        .attr('fill', '#ffffff')
+        .text(d => d._children ? '+' : (d.children ? '−' : ''))
+        .style('display', d => (d._children || d.children) ? 'block' : 'none');
+
+      // Category badge above root and level-1 nodes
+      nodeEnter.filter(d => d.depth <= 1)
+        .append('text')
+        .attr('dy', '-1.35em')
+        .attr('x', d => d.children || d._children ? -16 : 16)
+        .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+        .text(d => d.data.category || '')
+        .attr('font-size', '9px')
+        .attr('font-weight', '600')
+        .attr('fill', d => d.data.color || '#6366f1')
+        .attr('opacity', 0.85);
+
+      // Node title text
+      nodeEnter.append('text')
+        .attr('class', 'node-title fill-slate-800 dark:fill-slate-100')
+        .attr('dy', '.35em')
+        .attr('x', d => d.children || d._children ? -16 : 16)
+        .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+        .text(d => d.data.name)
+        .attr('font-size', d => d.depth === 0 ? '15px' : (d.depth === 1 ? '13px' : '12px'))
+        .attr('font-weight', d => d.depth <= 1 ? '700' : '500');
+
+      // Stable, jitter-free <학습목표> badge button ONLY for the "정보 공유" (node_2_1) node
+      const infoSharingNodes = nodeEnter.filter(d => d.data.id === 'node_2_1');
+      
+      const badgeGroup = infoSharingNodes.append('g')
+        .attr('class', 'goal-badge-group')
+        .attr('transform', 'translate(-152, -12)')
+        // Stop all propagation on hover and click events to prevent node toggle or shake loops
+        .on('mouseenter', (event) => event.stopPropagation())
+        .on('mouseleave', (event) => event.stopPropagation())
+        .on('mousedown', (event) => event.stopPropagation())
+        .on('touchstart', (event) => event.stopPropagation())
+        .on('click', (event) => {
+          event.stopPropagation();
+          showLearningGoalsModal();
+        });
+
+      // Generous invisible hit area to make hovering & clicking smooth and effortless
+      badgeGroup.append('rect')
+        .attr('x', -4)
+        .attr('y', -4)
+        .attr('width', 88)
+        .attr('height', 30)
+        .attr('fill', 'transparent')
+        .attr('stroke', 'none');
+
+      // Visible styled button background
+      badgeGroup.append('rect')
+        .attr('class', 'goal-badge-bg')
+        .attr('width', 80)
+        .attr('height', 22)
+        .attr('rx', 11)
+        .attr('stroke', '#ffffff')
+        .attr('stroke-width', 1.5)
+        .style('filter', 'drop-shadow(0 2px 4px rgba(16, 185, 129, 0.35))');
+
+      // Button text label with bookmark icon
+      badgeGroup.append('text')
+        .attr('x', 40)
+        .attr('y', 14.5)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '10.5px')
+        .attr('font-weight', '700')
+        .attr('fill', '#ffffff')
+        .style('pointer-events', 'none')
+        .text('🎯 학습목표');
+
+      // Transition nodes to new position
+      const nodeUpdate = node.merge(nodeEnter).transition().duration(duration)
+        .attr("transform", d => `translate(${d.y},${d.x})`);
+
+      nodeUpdate.select('circle.main-circle')
+        .attr('r', d => d.depth === 0 ? 12 : (d.depth === 1 ? 9 : 7))
+        .attr('fill', d => d.data.color || '#6366f1')
+        .attr('stroke', d => (activeFocusedNode && activeFocusedNode.id === d.id) ? '#38bdf8' : '#ffffff')
+        .attr('stroke-width', d => (activeFocusedNode && activeFocusedNode.id === d.id) ? 3.5 : 2);
+
+      nodeUpdate.select('.indicator-circle')
+        .attr('r', d => (d._children || d.children) ? 7 : 0)
+        .attr('fill', d => d._children ? '#f43f5e' : '#10b981')
+        .style('display', d => (d._children || d.children) ? 'block' : 'none');
+
+      nodeUpdate.select('.indicator-text')
+        .text(d => d._children ? '+' : (d.children ? '−' : ''))
+        .style('display', d => (d._children || d.children) ? 'block' : 'none');
+
+      // Transition exiting nodes
+      const nodeExit = node.exit().transition().duration(duration)
+        .attr("transform", d => `translate(${source.y},${source.x})`)
+        .remove();
+
+      nodeExit.select('circle').attr('r', 1e-6);
+      nodeExit.select('text').style('fill-opacity', 1e-6);
+
+      // -------------------- LINKS --------------------
+      const link = g.selectAll('path.link')
+        .data(links, d => d.target.id);
+
+      const linkEnter = link.enter().insert('path', "g")
+        .attr("class", "link")
+        .attr('stroke-opacity', 0.45)
+        .style('stroke', d => d.target.data.color || '#818cf8')
+        .attr('d', d => {
+          const o = {x: source.x0, y: source.y0};
+          return diagonal(o, o);
+        });
+
+      link.merge(linkEnter).transition().duration(duration)
+        .style('stroke', d => d.target.data.color || '#818cf8')
+        .attr('stroke-opacity', 0.5)
+        .attr('d', d => diagonal(d.source, d.target));
+
+      link.exit().transition().duration(duration)
+        .attr('d', d => {
+          const o = {x: source.x, y: source.y};
+          return diagonal(o, o);
+        })
+        .remove();
+
+      // Stash current positions for transitions
+      nodes.forEach(d => {
+        d.x0 = d.x;
+        d.y0 = d.y;
+      });
+    }
+
+    // Bezier curve path generator
+    function diagonal(s, d) {
+      return `M ${s.y} ${s.x}
+              C ${(s.y + d.y) / 2} ${s.x},
+                ${(s.y + d.y) / 2} ${d.x},
+                ${d.y} ${d.x}`;
+    }
+
+    // Toolbar Operations
+    function expandAll(d) {
+      if (d._children) {
+        d.children = d._children;
+        d._children = null;
+      }
+      if (d.children) {
+        d.children.forEach(expandAll);
+      }
+    }
+
+    function collapseAll(d) {
+      if (d.children && d.depth >= 1) {
+        d._children = d.children;
+        d._children.forEach(collapseAll);
+        d.children = null;
+      } else if (d.children) {
+        d.children.forEach(collapseAll);
+      }
+    }
+
+    document.getElementById('btnExpandAll').addEventListener('click', () => {
+      expandAll(root);
+      update(root);
+      resetView();
+    });
+
+    document.getElementById('btnCollapseAll').addEventListener('click', () => {
+      collapseAll(root);
+      update(root);
+      resetView();
+    });
+
+    function resetView() {
+      const transform = d3.zoomIdentity
+        .translate(100, height / 2)
+        .scale(0.9);
+      svg.transition().duration(600).call(zoom.transform, transform);
+    }
+
+    document.getElementById('btnResetZoom').addEventListener('click', resetView);
+
+    document.getElementById('btnZoomIn').addEventListener('click', () => {
+      svg.transition().duration(300).call(zoom.scaleBy, 1.25);
+    });
+
+    document.getElementById('btnZoomOut').addEventListener('click', () => {
+      svg.transition().duration(300).call(zoom.scaleBy, 0.8);
+    });
+
+    window.addEventListener('resize', () => {
+      width = container.clientWidth;
+      height = container.clientHeight;
+      svg.attr('width', width).attr('height', height);
+    });
+
+    // Initial load
+    window.addEventListener('DOMContentLoaded', () => {
+      update(root);
+      resetView();
+    });
+  </script>
+</body>
+</html>
